@@ -1,0 +1,128 @@
+---
+title: "Week 1"
+output: html_notebook
+---
+
+## 1
+
+### Question
+
+Suppose the globe tossing data (Chapter 2) had turned out to be 4 water and 11 land. Construct the posterior distribution, using grid approximation. Use the same flat prior as in the book.
+
+### Answer
+
+```{r non-grid-answer}
+curve(dbeta(x, 11, 4))
+```
+
+```{r grid_approximate_beta}
+grid_beta <- function(i, a, b) {
+  data <- rep(1, i)
+  for (r in 1:a) {
+    data <- data * seq(from = 0, to = 1, length.out = i)
+  }
+  for (r in 1:b) {
+    data <- data * seq(from = 1, to = 0, length.out = i)
+  }
+  data.frame(
+    x = seq(from = 0, to = 1, length.out = i), 
+    density = data / sum(data)
+  )
+}
+
+grid_beta_alt <- function(i, a, b) {
+  p_grid <- seq(from = 0, to = 1, length.out = i)
+  prior <- rep(1, i)
+  likelihood <- dbinom(a, a + b, prob = p_grid)
+  unstd.posterior <- likelihood * prior
+  unstd.posterior / sum(unstd.posterior)
+}
+
+i <- 100
+vals <- grid_beta(i, 11, 4)
+vals_alt <- grid_beta_alt(i, 11, 4)
+plot(vals$x, vals$density)
+points(vals$x, vals_alt, col = "red")
+curve(dbeta(x, 12, 5) / i, add = TRUE, col = 'blue')
+# Note that the method here assumes an implicit (1, 1) rather than (0, 0) prior
+```
+
+
+## 2
+
+### Question 
+
+Now suppose the data are 4 water and 2 land. Compute the posterior again, but this time use a prior that is zero below p = 0.5 and a constant above p = 0.5. This corresponds to prior information that a majority of the Earth’s surface is water.
+
+### Answer
+
+```{r grid_approximate_beta_prior}
+grid_beta_alt_prior <- function(i, a, b) {
+  p_grid <- seq(from = 0, to = 1, length.out = i)
+  prior <- ifelse(p_grid > 0.5, 1, 0)
+  likelihood <- dbinom(a, a + b, prob = p_grid)
+  unstd.posterior <- likelihood * prior
+  unstd.posterior / sum(unstd.posterior)
+}
+
+i <- 100
+vals <- grid_beta_prior(i, 11, 4)
+plot(vals$x, vals$density)
+curve(dbeta(x, 12, 5) / i, add = TRUE, col = 'blue')
+```
+
+## 3
+
+### Question 
+
+For the posterior distribution from 2,compute 89% percentile and HPDI intervals. Compare the widths of these intervals. Which is wider? Why? If you had only the information in the interval, what might you misunderstand about the shape of the posterior distribution?
+
+### Answer
+
+```{r sample_from_posterior}
+grid_size <- 100
+a <- 11
+b <- 4
+p_grid <- seq(from = 0, to = 1, length.out = grid_size)
+prior <- ifelse(p_grid > 0.5, 1, 0)
+likelihood <- dbinom(a, a + b, prob = p_grid)
+unstd.posterior <- likelihood * prior
+posterior <- unstd.posterior / sum(unstd.posterior)
+samples <- sample(p_grid, prob = posterior, size = 1e4, replace = T)
+library(rethinking)
+dens(samples)
+```
+
+```{r 89_interval}
+quantile(samples, probs = c(.5 - .89 / 2, .5 + .89 / 2))
+```
+
+```{r 89_2}
+PI(samples, prob = 0.89)
+```
+
+```{r HDPI}
+HPDI(samples, prob = 0.89)
+```
+
+## 4 
+
+### Question
+
+OPTIONAL CHALLENGE. Suppose there is bias in sampling so that Land is more likely than Water to be recorded. Specifically, assume that 1-in-5 (20%) of Water samples are accidentally recorded instead as ”Land”. First, write a generative simulation of this sampling process. Assuming the true proportion of Water is 0.70, what proportion does your simulation tend to produce instead? Second, using a simulated sample of 20 tosses, compute the unbiased posterior distribution of the true proportion of water.
+
+### Answer
+
+```{r generating_process}
+generate_lw <- function(i, true_p = 0.7, wrong_p = 0.2) {
+  probs <- c((1 - true_p) + (true_p * wrong_p), true_p * (1 - wrong_p))
+  sample(c("L", "W"), prob = probs, replace = T, size = i)
+}
+```
+
+```{r biased_posterior}
+n_draws <- 20
+draws <- generate_lw(n_draws)
+lands <- sum(draws == "L")
+curve(dbinom(n_draws - lands, n_draws, x * .8), from = 0, to = 1)
+```
