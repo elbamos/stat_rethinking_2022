@@ -65,14 +65,25 @@ dat_2 <- list(
   Abar = mean(howell_kids$age),
   G = howell_kids$male + 1
 )
+```
 
+```{r question2_priors}
+sigma <- runif(nrow(howell_kids), 0, 5)
+beta <- rlnorm(nrow(howell_kids), 0, 1)
+alpha <- rnorm(nrow(howell_kids), 15, 5)
+mu <- alpha + beta * (howell_kids$age - mean(howell_kids$age))
+W <- rnorm(nrow(howell_kids), mu, sigma)
+plot(x = howell_kids$weight, y = W)
+```
+
+```{r question2_regression}
 reg_2 <- quap(
   alist(
     W ~ dnorm(mu, sigma), 
     mu <- alpha + beta * (A - Abar), 
-    alpha ~ dnorm(14, 5),
+    alpha ~ dnorm(15, 5),
     beta ~ dlnorm(0, 1),
-    sigma ~ dunif(0, 10)
+    sigma ~ dunif(0, 5)
   ), 
   data = dat_2
 )
@@ -83,7 +94,7 @@ dens(samp_2$beta)
 
 ## Question 3
 
-Now suppose the causal association between age and weight might be different for boys and girls. Use a single linear regression, with a categorical variable for sex, to estimate the total causal effect of age on weight separately for boys and girls. How do girls and boys differ? Provide one or more posterior contrasts as a summary.
+Now suppose the causal association between age and weight might be different for boys and girls. Use a single linear regression, with a categorical variable for sex, to estimate the total causal effect of age on weight separately for boys and girls. 
 
 ```{r question_3}
 reg_3 <- quap(
@@ -96,7 +107,11 @@ reg_3 <- quap(
   ), 
   data = dat_2
 )
+precis(reg_3, depth=2)
+```
+How do girls and boys differ? Provide one or more posterior contrasts as a summary.
 
+```{r question_3_posterior_contrast}
 samp3 <- extract.samples(reg_3)
 diff <- samp3$beta[,2] - samp3$beta[,1]
 dens(diff)
