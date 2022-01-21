@@ -31,22 +31,28 @@ reg_1 <- quap(
   ), 
   data = dat_1
 )
-samp1 <- extract.samples(reg_1)
+
 targets <- data.frame(
   individual = c(1, 2, 3), 
   height = c(140, 160, 175)
 )
-samp1 |> 
-  tidyr::crossing(targets) |>
-  mutate(
-    weight = rnorm(n(), alpha + beta * (height - mean(howell_adults$height)), sd = sigma)
+
+samp1 <- sim(reg_1, data = list(
+  H = targets$height, 
+  Hbar = dat_1$Hbar
+))
+
+apply(samp1, 2, HPDI) |> 
+  t() |> 
+  data.frame() |>
+  magrittr::set_colnames(c(".055", ".945")) |>
+  bind_cols(targets) |>
+  mutate(expectation = apply(samp1, 2, mean)) |>
+  select(
+    individual, 
+    height, expectation, everything()
   ) |> 
-  group_by(individual, height) |>
-  summarize(
-    expectation = mean(weight), 
-    l_interval = HPDI(weight, .89)[1], 
-    r_interval = HPDI(weight, .89)[2]
-  ) |> knitr::kable()
+  knitr::kable()
 ```
 
 ## Question 2
@@ -141,6 +147,34 @@ The data in data(Oxboys) (rethinking package) are growth records for 26 boys mea
 
 ```{r question4}
 data(Oxboys)
+ox_data <- Oxboys |> 
+  group_by(Subject) |>
+  arrange(Occasion) |>
+  mutate(increment = height - lag(height), Occasion = Occasion - 1) |> 
+  filter(! is.na(increment))
+
+data_4 <- list(
+  I = ox_data$increment,
+  O = ox_data$Occasion
+)
+
+mod_4 <- quap(
+  alist(
+    I ~ dlnorm(mu, sigma), 
+    mu <- b[O],
+    b[O] ~ dlnorm(0, 1),
+    sigma ~ dexp(1)
+  ), 
+  data = data_4
+)
+
+precis(mod_4, depth = 2)
 ```
 
 Finally compute the posterior distribution of the total growth over all 9 occasions.
+
+```{r question_4_posterior}
+post_sim <- sim(mod_4, data = list(O = seq(1, 8)), n = 10000) |>
+  apply(1, sum)
+dens(post_sim)
+```
