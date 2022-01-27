@@ -26,6 +26,10 @@ model_1 <- quap(
 precis(model_1)
 ```
 
+```{r question_1_effect_size}
+samples_1 <- extract.samples(model_1)
+dens(samples_1$bA)
+```
 
 ## Question 2
 
@@ -89,9 +93,9 @@ data_4 <- data.frame(
   U = rbinom(n, 1, p_U), 
   A = rbinom(n, 1, p_A)
 ) |> mutate(
-  S = rnorm(n, a_S + b_SU * U + b_SA * A, s_S), 
-  X = rnorm(n, a_X + b_XS * S + b_XA * A, s_X), 
-  Y = rnorm(n, a_Y + b_YU * U + b_YS * S + b_YX * X + b_YA * A, s_Y)
+  S = rnorm(n(), a_S + b_SU * U + b_SA * A, s_S), 
+  X = rnorm(n(), a_X + b_XS * S + b_XA * A, s_X), 
+  Y = rnorm(n(), a_Y + b_YU * U + b_YS * S + b_YX * X + b_YA * A, s_Y)
 )
 print(b_YX)
 ```
