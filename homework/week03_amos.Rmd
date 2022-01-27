@@ -1,0 +1,120 @@
+---
+title: "Week 3"
+output: html_notebook
+---
+
+```{r setup}
+library(rethinking)
+library(dplyr)
+```
+
+## Question 1
+
+```{r question_1}
+data(foxes)
+
+model_1 <- quap(
+  alist(
+    avgfood ~ dnorm(mu, sigma),
+    mu <- alpha + bA * area, 
+    alpha ~ dnorm(0, 0.5), 
+    bA ~ dlnorm(0, 0.5), 
+    sigma ~ dexp(1)
+  ), 
+  data = foxes
+)
+precis(model_1)
+```
+
+```{r question_1_effect_size}
+samples_1 <- extract.samples(model_1)
+dens(samples_1$bA)
+```
+
+## Question 2
+
+```{r question_2}
+model_2_t <- quap(
+  alist(
+    weight ~ dnorm(mu, sigma), 
+    mu <- alpha + bF * avgfood, 
+    alpha ~ dnorm(0, 0.5), 
+    bF ~ dlnorm(0, 0.5), 
+    sigma ~ dexp(1)
+  ), 
+  data = foxes
+)
+
+model_2_d <- quap(
+  alist(
+    weight ~ dnorm(mu, sigma), 
+    mu <- alpha + bF * avgfood + bG * groupsize, 
+    alpha ~ dnorm(0, 0.5), 
+    bF ~ dnorm(0, 0.5), 
+    bG ~ dnorm(0, 0.5), 
+    sigma ~ dexp(1),
+    groupsize ~ dnorm(mu_g, sigma_g), 
+    mu_g <- alpha_g + bFG * avgfood,
+    alpha_g ~ dnorm(0, 0.5),
+    bFG ~ dnorm(0, 0.5), 
+    sigma_g ~ dexp(1)
+  ), 
+  data = foxes
+)
+```
+
+## Question 3
+
+## Question 4
+
+```{r question_4_simulate}
+n <- 5000
+p_U <- rbeta(1, 1, 1)
+p_A <- rbeta(1, 1, 1)
+
+a_S <- rnorm(1, 0, 1)
+b_SU <- rnorm(1, 0, 1)
+b_SA <- rnorm(1, 0, 1)
+s_S <- rexp(1)
+
+a_X <- rnorm(1, 0, 1)
+b_XS <- rnorm(1, 0, 1)
+b_XA <- rnorm(1, 0, 1)
+s_X <- rexp(1)
+
+a_Y <- rnorm(1, 0, 1)
+b_YU <- rnorm(1, 0, 1)
+b_YS <- rnorm(1, 0, 1)
+b_YX <- rnorm(1, 0, 1)
+b_YA <- rnorm(1, 0, 1)
+s_Y <- rexp(1)
+
+data_4 <- data.frame(
+  U = rbinom(n, 1, p_U), 
+  A = rbinom(n, 1, p_A)
+) |> mutate(
+  S = rnorm(n(), a_S + b_SU * U + b_SA * A, s_S), 
+  X = rnorm(n(), a_X + b_XS * S + b_XA * A, s_X), 
+  Y = rnorm(n(), a_Y + b_YU * U + b_YS * S + b_YX * X + b_YA * A, s_Y)
+)
+print(b_YX)
+```
+
+```{r question_4_model}
+model_4 <- quap(
+  alist(
+    Y ~ dnorm(mu, sigma), 
+    mu <- alpha + bX * X + bS * S + bA * A, 
+    alpha ~ dnorm(0, 1), 
+    bX ~ dnorm(0, 1), 
+    bS ~ dnorm(0, 1), 
+    bA ~ dnorm(0, 1),
+    sigma ~ dexp(1)
+  ), 
+  data = data_4
+)
+precis(model_4)
+```
+
+
+We begin to be reliable, in the sense that the true value is within the 89% confidence interval, at > 1000 data points. 
