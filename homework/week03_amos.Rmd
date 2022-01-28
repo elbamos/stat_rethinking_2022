@@ -6,6 +6,7 @@ output: html_notebook
 ```{r setup}
 library(rethinking)
 library(dplyr)
+library(dagitty)
 ```
 
 ## Question 1
@@ -61,9 +62,30 @@ model_2_d <- quap(
   ), 
   data = foxes |> mutate_all(scale)
 )
+
+plot(coeftab(model_2_d, model_2_t))
 ```
 
 ## Question 3
+
+Condition on A, S, and X. We'd like to condition on U but we can't. 
+
+```{r question_3}
+q3_dag <- dagitty("dag{
+  A -> S -> X;
+  A -> X -> Y [beta=3];
+  A -> Y;
+  S -> Y;
+  Y <- U -> S;
+  X [exposure]
+  Y [outcome]
+  U [unobserved]
+}")
+plot(q3_dag)
+```
+```{r question_3_adj}
+adjustmentSets(q3_dag)
+```
 
 ## Question 4
 
@@ -118,3 +140,29 @@ precis(model_4)
 
 
 We begin to be reliable, in the sense that the true value is within the 89% confidence interval, at > 1000 data points. 
+
+## Question 4 Logistic Simulation
+
+```{r question_4_logistic}
+data_4_l <- simulateLogistic(q3_dag, N = 1000) |>
+  mutate_all(as.integer) |> 
+  mutate_all(~ . - 1L)
+```
+
+```{r question_4_logisitic_model}
+model_4_l <- quap(
+  alist(
+    Y ~ dbinom(1, p), 
+    logit(p) <- a + bX * X + bS * S + bA * A, 
+    a ~ dnorm(0, 1), 
+    bX ~ dnorm(0, .3), 
+    bS ~ dnorm(0, .3), 
+    bA ~ dnorm(0, .3)
+  ), 
+  data = data_4_l
+)
+precis(model_4_l)
+```
+
+
+Again, at around n=1000, we begin to get accurate estimates of bX. 
