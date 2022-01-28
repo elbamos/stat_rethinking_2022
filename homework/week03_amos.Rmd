@@ -18,10 +18,10 @@ model_1 <- quap(
     avgfood ~ dnorm(mu, sigma),
     mu <- alpha + bA * area, 
     alpha ~ dnorm(0, 0.5), 
-    bA ~ dlnorm(0, 0.5), 
+    bA ~ dnorm(0, 0.5), 
     sigma ~ dexp(1)
   ), 
-  data = foxes
+  data = foxes |> mutate_all(scale)
 )
 precis(model_1)
 ```
@@ -39,10 +39,10 @@ model_2_t <- quap(
     weight ~ dnorm(mu, sigma), 
     mu <- alpha + bF * avgfood, 
     alpha ~ dnorm(0, 0.5), 
-    bF ~ dlnorm(0, 0.5), 
+    bF ~ dnorm(0, 0.5), 
     sigma ~ dexp(1)
   ), 
-  data = foxes
+  data = foxes |> mutate_all(scale)
 )
 
 model_2_d <- quap(
@@ -59,7 +59,7 @@ model_2_d <- quap(
     bFG ~ dnorm(0, 0.5), 
     sigma_g ~ dexp(1)
   ), 
-  data = foxes
+  data = foxes |> mutate_all(scale)
 )
 ```
 
@@ -111,7 +111,7 @@ model_4 <- quap(
     bA ~ dnorm(0, 1),
     sigma ~ dexp(1)
   ), 
-  data = data_4
+  data = data_4 #|> mutate(across(-c(U, A), scale))
 )
 precis(model_4)
 ```
