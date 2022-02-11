@@ -1,0 +1,80 @@
+---
+title: "Week 05"
+output: html_notebook
+---
+
+```{r setup}
+library(rethinking)
+library(dplyr)
+library(dagitty)
+library(magrittr)
+library(ggplot2)
+```
+
+## Question 1
+
+```{r question_1}
+data("NWOGrants")
+q1_data <- NWOGrants |> 
+  mutate(
+    discipline = as.integer(discipline), 
+    gender = as.integer(gender)
+  )
+
+q1_dag <- dagitty("dag{
+  G -> P
+  G -> D
+  D -> P
+}")
+plot(q1_dag)
+```
+
+```{r q1_model}
+q1_mod <- ulam(
+  alist(
+    awards ~ binomial(applications, p), 
+    logit(p) <- b[gender], 
+    vector[2]: b ~ normal(0, 0.2)
+  ), data = q1_data
+)
+q1_samp <- extract.samples(q1_mod)$b
+dens(q1_samp[, 2] - q1_samp[, 1])
+```
+## Question 2
+
+```{r question_2}
+q2_mod <- ulam(
+  alist(
+    awards ~ binomial(applications, p), 
+    logit(p) <- a[discipline] + b[gender], 
+    vector[9]: a ~ normal(0, 0.2), 
+    vector[2]: b ~ normal(0, 0.2)
+  ), data = q1_data
+)
+
+q2_samp <- extract.samples(q2_mod)$b
+dens(q2_samp[, 2] - q2_samp[, 1])
+```
+
+## Question 4
+
+```{r question_4}
+data("UFClefties")
+q4_data <- UFClefties |> 
+  select(fighter1, fighter2, win = fighter1.win, 
+         lefty1 = fighter1.lefty, lefty2 = fighter2.lefty)
+
+q4_mod <- ulam(
+  alist(
+    win ~ bernoulli(p), 
+    logit(p) <- b[fighter1] - b[fighter2] + (a * (lefty1 - lefty2)),
+    vector[244]: b ~ dnorm(0, 0.2), 
+    a ~ dnorm(0, 0.2)
+  ), 
+  data = q4_data
+)
+
+lefty_bonus <- extract.samples(q4_mod)$a
+dens(lefty_bonus)
+```
+
