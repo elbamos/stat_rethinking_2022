@@ -1,0 +1,200 @@
+---
+title: "Week 06"
+output: html_notebook
+---
+
+```{r setup}
+library(rethinking)
+library(dplyr)
+library(magrittr)
+library(dagitty)
+library(ggplot2)
+```
+
+## Question 1
+
+```{r question1}
+q1_n <- 3000
+q1_sim_1w <- data.frame(
+  i = 1:q1_n
+) |> 
+  mutate(
+    prior = sample(c(0.1, 1, 10), n(), replace = T), 
+    sigma = rexp(n(), rate = prior), 
+    alpha_bar = rnorm(n(), 0, 1), 
+    alpha_j = rnorm(n(), alpha_bar, sigma)
+  )
+
+q1_sim_1w |> 
+  mutate(alpha_j = plogis(alpha_j)) |>
+  ggplot(aes(x = alpha_j, color = factor(prior), fill = factor(prior))) + 
+  geom_density(alpha = 0.3) 
+```
+
+
+## Question 2
+
+```{r question_2}
+data("reedfrogs")
+q2_data <- reedfrogs |> 
+  mutate(
+    pred = as.integer(pred), 
+    size = as.integer(size), 
+    t = 1:n()
+  )
+
+q2_model <- ulam(
+  alist(
+    surv ~ dbinom(density, p), 
+    logit(p) <- a[t] + b[pred, size], 
+    vector[48]: a ~ dnorm(a_bar, sigma), 
+    a_bar ~ dnorm(0, 1.5), 
+    sigma ~ dexp(1), 
+    matrix[2, 2]: b ~ dnorm(0, 0.2)
+  ), 
+  data = q2_data, chains = 4, cores = 4, log_lik = T
+)
+
+q2_model_2 <- ulam(
+  alist(
+    surv ~ dbinom(density, p), 
+    logit(p) <- a[t] + b[pred, size], 
+    vector[48]: a ~ dnorm(a_bar, sigma), 
+    a_bar ~ dnorm(0, 1.5), 
+    sigma ~ dexp(1), 
+    matrix[2, 2]: b ~ dnorm(0, sigma_2),
+    sigma_2 ~ dexp(1)
+  ), 
+  data = q2_data, chains = 4, cores = 4, log_lik = T
+)
+```
+
+```{r q2_compare}
+compare(q2_model, q2_model_2)
+```
+
+```{r question2_est}
+q2_b <- extract.samples(q2_model_2)$b
+q2_b |> data.frame() |> 
+  tidyr::gather(key = "key", value = "value") |> 
+  ggplot(aes(x = value, color = key, fill = key)) +
+  geom_density(alpha = 0.3)
+```
+
+```{r question_2_dag}
+q2_dag <- dagitty("dag {
+  T -> p
+  Pred -> p
+  Sz -> p
+  p -> survived
+  density -> survived
+}")
+plot(q2_dag)
+```
+
+## Question 3
+
+```{r question_3}
+q3_data <- list(
+    surv = reedfrogs$surv, 
+    density = reedfrogs$density,
+    pred = as.integer(reedfrogs$pred), 
+    size = as.integer(reedfrogs$size), 
+    d_ord = as.integer(ordered(reedfrogs$density)),
+    t = 1:nrow(reedfrogs), 
+    a_prior = c(2, 2)
+  )
+
+q3_model <- ulam(
+  alist(
+    surv ~ dbinom(density, p), 
+    logit(p) <- a[t] + b[pred, size] + (bd * sum(dvec[1:d_ord])), 
+    vector[48]: a ~ dnorm(a_bar, sigma), 
+    a_bar ~ dnorm(0, 1.5), 
+    sigma ~ dexp(1), 
+    matrix[2, 2]: b ~ dnorm(0, sigma_2),
+    sigma_2 ~ dexp(1),
+    bd ~ dnorm(0, 0.2),
+    vector[3]: dvec <<- append_row(0, delta),
+    simplex[2]: delta ~ dirichlet(a_prior)
+  ), 
+  data = q3_data, chains = 4, cores = 4, log_lik = T
+)
+
+q3_model2 <- ulam(
+  alist(
+    surv ~ dbinom(density, p), 
+    logit(p) <- a[t] + b[pred, size] + (bd * density), 
+    vector[48]: a ~ dnorm(a_bar, sigma), 
+    a_bar ~ dnorm(0, 1.5), 
+    sigma ~ dexp(1), 
+    matrix[2, 2]: b ~ dnorm(0, sigma_2),
+    sigma_2 ~ dexp(1),
+    bd ~ dnorm(0, 0.2)
+  ), 
+  data = q3_data, chains = 4, cores = 4, log_lik = T
+)
+```
+
+```{r question_3_estimate}
+precis(q3_model, depth = 2, pars = c("bd", "dvec"))
+```
+
+```{r question_3_compare}
+compare(q3_model, q3_model2, q2_model)
+```
+
+
+```{r question_3_sigma}
+sigma_3 <- extract.samples(q3_model)$sigma
+sigma_3_2 <- extract.samples(q3_model2)$sigma
+sigma_2 <- extract.samples(q2_model)$sigma
+
+data.frame(sigma_2, sigma_3, sigma_3_2) |> 
+  tidyr::gather(key = "key", value = "value") |> 
+  ggplot(aes(x = value, color = key, fill = key)) +
+  geom_density(alpha = 0.3)
+```
+
+```{r waic}
+compare(q2_model, q3_model, q3_model2, q2_model_2, func = "WAIC")
+```
+
+## Question 4
+
+```{r question_4}
+q3_2_samples <- extract.samples(q3_model)
+q4_data <- data.frame(
+  a_bar = q3_2_samples$a_bar, 
+  sigma = q3_2_samples$sigma, 
+  bd = q3_2_samples$bd, 
+  b_p1_s1 = q3_2_samples$b[1:2000, 1, 1], 
+  b_p2_s1 = q3_2_samples$b[1:2000, 2, 1], 
+  b_p1_s2 = q3_2_samples$b[1:2000, 1, 2], 
+  b_p2_s2 = q3_2_samples$b[1:2000, 2, 2], 
+  n = 1:2000
+) |> 
+  tidyr::crossing(tst_dens = c(10, 35), tst_sz = c("large", "small")) |> 
+  mutate(
+    a = dnorm(n(), a_bar, sigma), 
+    b_p = if_else(tst_sz == "large", b_p2_s1, b_p2_s2), 
+    b_no = if_else(tst_sz == "large", b_p1_s1, b_p1_s2),
+    p_p = plogis(a + b_p + tst_dens * bd), 
+    p_no = plogis(a + b_no + tst_dens * bd),
+    surv_p = rbinom(n(), 25, prob = p_p), 
+    surv_no = rbinom(n(), 25, prob = p_no)
+  ) |> 
+    group_by(n) |>
+  summarize(
+    surv_p = sum(surv_p), 
+    surv_no = sum(surv_no)
+  )
+
+dens(q4_data$surv_no - q4_data$surv_p)
+
+```
+
+
+
+
+
