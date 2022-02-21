@@ -141,7 +141,7 @@ precis(q3_model, depth = 2, pars = c("bd", "dvec"))
 ```
 
 ```{r question_3_compare}
-compare(q3_model, q3_model2, q2_model)
+compare(q3_model, q3_model2, q2_model, q2_model_2)
 ```
 
 
