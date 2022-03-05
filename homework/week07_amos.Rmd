@@ -1,0 +1,110 @@
+---
+title: "Week 07"
+output: html_notebook
+---
+
+```{r setup}
+library(rethinking)
+library(dplyr)
+library(magrittr)
+library(dagitty)
+library(ggplot2)
+```
+
+## Question 1
+
+```{r question_1}
+data(bangladesh)
+q1_data <- bangladesh |> 
+  select(use = use.contraception, district)
+
+q1_model <- ulam(
+  alist(
+    use ~ dbern(inv_logit(a[district])), 
+    vector[61]: a ~ dnorm(abar, sigma), 
+    abar ~ dnorm(0, 0.2), 
+    sigma ~ dexp(1)
+  ), 
+  data = q1_data, 
+  chains = 4, cores = 4, log_lik = T
+)
+
+q1_a <- extract.samples(q1_model)$a
+q1_a_est <- apply(q1_a, 2, function(x) mean(inv_logit(x)))
+q1_data |> 
+  group_by(district) |>
+  summarize(
+    use = sum(use), 
+    count = n(), 
+    est = use / count
+  ) |> inner_join(
+    data.frame(district = 1:61, alpha = q1_a_est)
+  ) |>
+  ggplot(aes(x = est, y = alpha, label = district)) +
+  geom_point() +
+  geom_label(nudge_x = - 0.01, nudge_y = - 0.01, size = 2.5, label.padding = unit(.125, "lines"))
+```
+
+## Question 2
+
+```{r question_2_dag}
+q2_dag <- dagitty("dag{
+  A -> U
+  K <-> U
+  A -> K
+  Ur -> U
+  D -> U
+  D -> Ur
+  Ur [exposure]
+  U [outcome]
+}")
+plot(q2_dag)
+```
+
+
+```{r q2_est}
+adjustmentSets(q2_dag, effect = "direct")
+adjustmentSets(q2_dag, effect = "total")
+```
+
+
+## Question 3
+
+```{r question3_direct}
+q3_data <- bangladesh |> 
+  rename(use = use.contraception, age = age.centered, K = living.children) |>
+  mutate(urban = urban + 1, K = K - 1)
+
+q3_model <- ulam(
+  alist(
+    use ~ dbern(p), 
+    logit(p) <- abar + a[district, urban] + bK * K + bA * age,
+    transpars> matrix[61, 2]: a <- compose_noncentered(sigma, L_Rho, z),
+    matrix[2, 61]: z ~ normal(0, 1), 
+    abar ~ dnorm(0, 0.2), 
+    bK ~ dnorm(0, 0.2), 
+    bA ~ dnorm(0, 0.2), 
+    vector[2]: sigma ~ dexp(1), 
+    cholesky_factor_corr[2]: L_Rho ~ lkj_corr_cholesky(2), 
+    gq> matrix[2, 2]: Rho <<- Chol_to_Corr(L_Rho)
+  ), 
+  data = q3_data, 
+  chains = 4, cores = 4, log_lik = T
+)
+```
+
+
+```{r q3_rho}
+precis(q3_model, depth=3, pars = "Rho")
+```
+
+```{r q3_urban_effect}
+q3_a <- extract.samples(q3_model)$a
+data.frame(q3_a) |> glimpse()
+```
+
+
+
+
+
+

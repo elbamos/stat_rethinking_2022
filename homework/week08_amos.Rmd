@@ -1,0 +1,166 @@
+---
+title: "Week 08"
+output: html_notebook
+---
+
+```{r setup}
+library(rethinking)
+library(dplyr)
+library(dagitty)
+library(magrittr)
+library(ggplot2)
+library(readr)
+```
+
+```{r data}
+monks <- read_csv("./homework/week08_Monks.csv")
+monks |> glimpse()
+```
+
+## Question 1: Estimate Reciprocity
+
+```{r question_1}
+dat1 <- monks
+dat1 <- as.list(dat1)
+dat1$N_dyads <- max(monks$dyad_id)
+dat1$B_name <- NULL
+dat1$A_name <- NULL
+
+q1_mod <- ulam(
+  alist(
+    like_AB ~ binomial(3, p_AB),
+    like_BA ~ binomial(3, p_BA), 
+    logit(p_AB) <- a + b[dyad_id, 1], 
+    logit(p_BA) <- a + b[dyad_id, 2], 
+    transpars> matrix[N_dyads, 2]:b <- 
+      compose_noncentered(rep_vector(sigma, 2), L_Rho_b, Z), 
+    matrix[2, N_dyads]: Z ~ normal(0, 1), 
+    cholesky_factor_corr[2]:L_Rho_b ~lkj_corr_cholesky(2), 
+    a ~ normal(0, 1), 
+    sigma ~ exponential(1), 
+    gq> matrix[2,2]:Rho_b <<- Chol_to_Corr(L_Rho_b)
+  ), 
+  data = dat1, chains = 4, cores = 4
+)
+```
+
+```{r question1_estimate}
+precis(q1_mod, "Rho_b", depth = 3)
+```
+
+
+
+## Question 2
+
+```{r question_2}
+q2_mod <- ulam(
+  alist(
+    dislike_AB ~ binomial(3, p_AB),
+    dislike_BA ~ binomial(3, p_BA), 
+    logit(p_AB) <- a + b[dyad_id, 1], 
+    logit(p_BA) <- a + b[dyad_id, 2], 
+    transpars> matrix[N_dyads, 2]:b <- 
+      compose_noncentered(rep_vector(sigma, 2), L_Rho_b, Z), 
+    matrix[2, N_dyads]: Z ~ normal(0, 1), 
+    cholesky_factor_corr[2]:L_Rho_b ~lkj_corr_cholesky(2), 
+    a ~ normal(0, 1), 
+    sigma ~ exponential(1), 
+    gq> matrix[2,2]:Rho_b <<- Chol_to_Corr(L_Rho_b)
+  ), 
+  data = dat1, chains = 4, cores = 4
+)
+```
+
+```{r question2_estimate}
+precis(q2_mod, "Rho_b", depth = 3)
+```
+
+## Question 3
+
+```{r question_3}
+dat1$N_monks <- 18
+
+q3_mod <- ulam(
+  alist(
+    dislike_AB ~ binomial(3, pd_AB),
+    dislike_BA ~ binomial(3, pd_BA), 
+    like_AB ~ binomial(3, p_AB), 
+    like_BA ~ binomial(3, p_BA),
+    logit(pd_AB) <- a + b[dyad_id, 1] - likability[B] + br[B, 1] + br[A, 2], 
+    logit(pd_BA) <- a + b[dyad_id, 2] - likability[A] + br[A, 1] + br[B, 2],
+    logit(p_AB) <- a + b[dyad_id, 1] + likability[B] + br[B, 1] + br[A, 2], 
+    logit(p_BA) <- a + b[dyad_id, 2] + likability[A] + br[A, 1] + br[B, 2], 
+    transpars> matrix[N_dyads, 2]:b <- 
+      compose_noncentered(rep_vector(sigma, 2), L_Rho_b, Z), 
+    transpars> matrix[N_monks, 2]:br <- 
+      compose_noncentered(sigma_r, L_Rho_br, Zr),  
+    matrix[2, N_dyads]: Z ~ normal(0, 1), 
+    matrix[2, N_monks]: Zr ~ normal(0, 1), 
+    cholesky_factor_corr[2]:L_Rho_b ~lkj_corr_cholesky(2), 
+    cholesky_factor_corr[2]:L_Rho_br ~ lkj_corr_cholesky(2),
+    a ~ normal(0, 1), 
+    vector[N_monks]:likability ~ normal(0, .2), 
+    sigma ~ exponential(1), 
+    vector[2]:sigma_r ~ exponential(1),
+    gq> matrix[2,2]:Rho_b <<- Chol_to_Corr(L_Rho_b),
+    gq> matrix[2,2]:Rho_br <<- Chol_to_Corr(L_Rho_br)
+  ), 
+  data = dat1, chains = 4, cores = 4
+)
+```
+
+```{r question_3_liked_disliked}
+precis(q3_mod, "likability", depth = 2)
+```
+
+## Question 4
+
+```{r question_4}
+dat1$faction <- c(1, 2, 3, 2, 2, 2, 1, 4, 2, 4, 2, 1, 4, 1, 1, 1, 3, 3)
+dat1$N_factions <- 4
+
+q4_mod <- ulam(
+  alist(
+    dislike_AB ~ binomial(3, pd_AB),
+    dislike_BA ~ binomial(3, pd_BA), 
+    like_AB ~ binomial(3, p_AB), 
+    like_BA ~ binomial(3, p_BA),
+    logit(pd_AB) <- a + b[dyad_id, 1] - likability[B] + br[B, 1] + br[A, 2] -
+      fac[faction[A], faction[B]], 
+    logit(pd_BA) <- a + b[dyad_id, 2] - likability[A] + br[A, 1] + br[B, 2] -
+      fac[faction[B], faction[A]],
+    logit(p_AB) <- a + b[dyad_id, 1] + likability[B] + br[B, 1] + br[A, 2] +
+      fac[faction[A], faction[B]], 
+    logit(p_BA) <- a + b[dyad_id, 2] + likability[A] + br[A, 1] + br[B, 2] +
+      fac[faction[B], faction[A]], 
+    transpars> matrix[N_dyads, 2]:b <- 
+      compose_noncentered(rep_vector(sigma, 2), L_Rho_b, Z), 
+    transpars> matrix[N_monks, 2]:br <- 
+      compose_noncentered(sigma_r, L_Rho_br, Zr),  
+    transpars> matrix[N_factions, N_factions]: fac <- 
+      compose_noncentered(sigma_f, L_Rho_f, Zf),
+    matrix[2, N_dyads]: Z ~ normal(0, 1), 
+    matrix[2, N_monks]: Zr ~ normal(0, 1), 
+    matrix[N_factions, N_factions]: Zf ~ normal(0, 1), 
+    cholesky_factor_corr[2]:L_Rho_b ~lkj_corr_cholesky(2), 
+    cholesky_factor_corr[2]:L_Rho_br ~ lkj_corr_cholesky(2),
+    cholesky_factor_corr[N_factions]:L_Rho_f ~ lkj_corr_cholesky(2),
+    a ~ normal(0, 1), 
+    vector[N_monks]:likability ~ normal(0, .2), 
+    sigma ~ exponential(1), 
+    vector[2]:sigma_r ~ exponential(1),
+    vector[N_factions]:sigma_f ~ exponential(1),
+    gq> matrix[2,2]:Rho_b <<- Chol_to_Corr(L_Rho_b),
+    gq> matrix[2,2]:Rho_br <<- Chol_to_Corr(L_Rho_br),
+    gq> matrix[N_factions,N_factions]:Rho_f <<- Chol_to_Corr(L_Rho_f)
+  ), 
+  data = dat1, chains = 4, cores = 4
+)
+```
+
+```{r question4_factions}
+precis(q4_mod, "Rho_f", depth = 3)
+```
+
+
+
