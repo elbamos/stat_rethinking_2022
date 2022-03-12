@@ -1,0 +1,133 @@
+---
+title: "Week 9"
+output: html_notebook
+---
+
+```{r setup}
+library(rethinking)
+library(dplyr)
+library(dagitty)
+library(ggplot2)
+library(magrittr)
+```
+
+```{r data}
+data("Achehunting")
+Achehunting |> glimpse()
+```
+
+## Question 1
+
+```{r question_1}
+dat09_01 <- Achehunting |> 
+  mutate(success = kg.meat > 0) |>
+  select(success, age)
+
+q1_mod <- ulam(
+  alist(
+    success ~ bernoulli(p),
+    logit(p) <- a + bA * age, 
+    a ~ normal(0, 0.2), 
+    bA ~ normal(0, 0.2)
+  ), 
+  data = dat09_01, chains = 4, cores = 4
+)
+```
+
+## Question 2
+
+```{r question_2}
+dat09_02 <- Achehunting |> 
+  mutate(success = kg.meat > 0) |>
+  select(success, age, id) |> 
+  mutate(id = factor(id)) |>
+  mutate(id = as.integer(id)) |> 
+  mutate(age = (age - mean(age)) / sd(age)) |>
+  as.list()
+
+dat09_02$N_hunters <- max(dat09_02$id)
+
+q2_mod <- ulam(
+  alist(
+    success ~ bernoulli(p),
+    logit(p) <- a + bA * age + bH[id], 
+    a ~ normal(0, 0.2), 
+    bA ~ normal(0, 0.2),
+    vector[N_hunters]:bH ~ normal(0, sigma_H),
+    sigma_H ~ exponential(1)
+  ), 
+  data = dat09_02, chains = 4, cores = 4
+)
+```
+
+```{r question2_precis}
+precis(q2_mod, c("bA", "bH"), depth = 2)
+```
+
+## Question 3
+
+```{r question_3_missing}
+dat09_03 <- Achehunting |> 
+  mutate(success = kg.meat > 0) |>
+  select(success, age, id, hours) |> 
+  mutate(id = factor(id)) |>
+  mutate(id = as.integer(id)) |> 
+  mutate(age = (age - mean(age)) / sd(age)) |>
+  filter(! is.na(hours)) |> 
+  as.list()
+
+dat09_03$N_hunters <- max(dat09_02$id)
+
+q3_mod_1 <- ulam(
+  alist(
+    success ~ bernoulli(p),
+    logit(p) <- a + bA * age + bH[id] + bd * hours, 
+    a ~ normal(0, 0.2), 
+    bA ~ normal(0, 0.2),
+    bd ~ normal(0, 0.2),
+    vector[N_hunters]:bH ~ normal(0, sigma_H),
+    sigma_H ~ exponential(1)
+  ), 
+  data = dat09_03, chains = 4, cores = 4
+)
+```
+
+```{r question_3_imputed}
+dat09_03_imp <- Achehunting |> 
+  mutate(success = kg.meat > 0) |>
+  select(success, age, id, hours) |> 
+  mutate(id = factor(id)) |>
+  mutate(id = as.integer(id)) |> 
+  mutate(age = (age - mean(age)) / sd(age)) |>
+  as.list()
+
+dat09_03_imp$N_hunters <- max(dat09_02$id)
+dat09_03_imp$mean_hours <- mean(dat09_03_imp$hours, na.rm=T)
+
+q3_mod_2 <- ulam(
+  alist(
+    success ~ bernoulli(p),
+    logit(p) <- a + bA * age + bH[id] + bd * hours, 
+    a ~ normal(0, 0.2), 
+    bA ~ normal(0, 0.2),
+    bd ~ normal(0, 0.2),
+    vector[N_hunters]:bH ~ normal(0, sigma_H),
+    sigma_H ~ exponential(1),
+    hours ~ normal(lvl_hours[id], sigma_hours),
+    sigma_hours ~ exponential(1), 
+    vector[N_hunters]:lvl_hours ~ normal(mean_hours, sigma_lvl), 
+    sigma_lvl ~ exponential(1)
+  ), 
+  data = dat09_03_imp, chains = 4, cores = 4
+)
+```
+
+```{r q3_complete}
+precis(q3_mod_1, pars = "bA")
+```
+
+```{r q3_impute}
+precis(q3_mod_2, pars = "bA")
+```
+
+
